@@ -159,6 +159,7 @@ input[type="date"].input { min-width: 0; }
   transition: background .15s, transform .05s, opacity .15s;
   -webkit-tap-highlight-color: transparent;
 }
+.btn { text-decoration: none; }
 .btn:active { transform: translateY(1px); }
 .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .btn-primary { background: var(--navy); color: #fff; }
@@ -244,3 +245,9 @@ input[type="date"].input { min-width: 0; }
   .step-title { font-size: 26px; }
 }
 noscript .banner { margin: 16px; }
+
+.done .btn-submit { width: 100%; max-width: 320px; margin: 6px 0 12px; }
+.row-btns.more { margin-top: 14px; gap: 20px; }
+.addr { list-style: none; margin: 4px 0 14px; padding: 0; font-weight: 600; overflow-wrap: anywhere; }
+.addr li { margin: 2px 0; }
+.row-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }

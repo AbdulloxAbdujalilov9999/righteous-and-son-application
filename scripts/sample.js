@@ -110,7 +110,7 @@ function sampleValues() {
       { type: 'Minor scrape', date: '2023-04-02', hazmat: 'No', towed: 'No', city: 'Macon', state: 'GA', commercial: 'Yes', dotRec: 'No', fault: 'No', ticketed: 'No', desc: 'Side-mirror clip in lot, no injuries.' },
     ],
     hadViolations: 'Yes', violationDetails: '03/2024 — Speeding 8 over, Ocala FL, paid fine.',
-    ack_psp: true, ack_drug: true, ack_clearinghouse: true,
+    ack_psp: true, ack_drug: true, ack_zero: true, ack_clearinghouse: true,
     signedDate: S.isoToday(),
   };
 }

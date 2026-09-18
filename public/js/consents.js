@@ -82,6 +82,11 @@
       text: 'By checking the box, I (a) acknowledge that I have read and understand the above and also have been given the opportunity to copy/print it, and (b) agree to use an electronic signature to demonstrate my consent. An electronic signature is as legally binding as an ink signature',
     },
     {
+      id: 'ack_zero',
+      title: 'Drug and Alcohol Zero Tolerance Policy',
+      text: 'By checking the box, I (a) acknowledge that Righteous and Son Inc has a Zero Tolerance Policy for the use, sale, purchase, transfer, possession, or presence in one\u2019s system of alcohol or any controlled substance (except medically prescribed drugs) by any person while engaged in company business, operating company equipment, or while under the authority of Righteous and Son Inc is strictly prohibited.',
+    },
+    {
       id: 'ack_clearinghouse',
       title: 'Clearinghouse Release',
       text: 'By checking the box, I (a) acknowledge that I have read and understand the above and also have been given the opportunity to copy/print it, and (b) agree to use an electronic signature to demonstrate my consent. An electronic signature is as legally binding as an ink signature.',

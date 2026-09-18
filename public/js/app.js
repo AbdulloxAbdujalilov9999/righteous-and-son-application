@@ -33,6 +33,7 @@
     linked: { psp: true, final: true },
     restored: false,
     copy: null,
+    files: null,
     pads: {},
     busy: false,
   };
@@ -326,7 +327,7 @@
     const back = $('#backBtn');
     const next = $('#nextBtn');
     back.hidden = state.step === 0;
-    next.textContent = state.step === LAST ? 'Submit application' : 'Continue';
+    next.textContent = state.step === LAST ? 'Download PDF' : 'Continue';
     next.classList.toggle('btn-submit', state.step === LAST);
     next.classList.toggle('btn-primary', state.step !== LAST);
     $('#actionbar').hidden = false;
@@ -499,47 +500,87 @@
     return new Blob([bytes], { type });
   }
 
-  function downloadCopy(copy) {
-    const url = URL.createObjectURL(b64ToBlob(copy.base64, 'application/pdf'));
+  function blobUrl(file) {
+    return URL.createObjectURL(b64ToBlob(file.base64, 'application/pdf'));
+  }
+
+  function saveFile(file) {
+    const url = blobUrl(file);
     const a = document.createElement('a');
     a.href = url;
-    a.download = copy.filename;
+    a.download = file.filename;
     a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 120000);
-    return url;
+  }
+
+  /** Downloads the single combined PDF (the easiest thing to attach to an email). */
+  function downloadPdf() {
+    if (!state.copy) return;
+    saveFile(state.copy);
+    clearDraft();
+  }
+
+  /** Downloads the three forms as separate PDFs (the PSP form as its own stand-alone document). */
+  async function downloadSeparate() {
+    if (!state.files) return;
+    for (const f of state.files) {
+      saveFile(f);
+      await new Promise((r) => setTimeout(r, 700));
+    }
+    clearDraft();
+  }
+
+  /** Opens the PDF in the browser's viewer (which has its own Save / Share options on phones). */
+  function previewPdf() {
+    if (!state.copy) return;
+    const url = blobUrl(state.copy);
+    const w = window.open(url, '_blank');
+    if (!w) location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
   }
 
   function showSubmitError(message) {
     const box = $('#submitError');
     if (!box) return;
-    const name = state.data.fullName || '';
-    const mailto = `mailto:${MAIL_TO}?subject=${encodeURIComponent('Driver Application - ' + name)}&body=${encodeURIComponent('Please find my completed driver application attached (PDF).\n\nName: ' + name)}`;
-    box.innerHTML = `<div class="banner error"><p><strong>${esc(message)}</strong></p>${state.copy ? `<p>Your answers are still on this page. You can try again, or save your PDF and email it to the company.</p><div class="row"><button type="button" class="btn btn-secondary btn-small" data-action="download">Download my PDF</button><a class="btn btn-secondary btn-small" href="${esc(mailto)}">Email it instead</a></div>` : ''}</div>`;
+    box.innerHTML = `<div class="banner error"><p><strong>${esc(message)}</strong></p><p>Your answers are still on this page — tap the button to try again.</p></div>`;
     box.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  function showSuccess(res) {
-    state.copy = res.copy || null;
-    clearDraft();
+  function showReady(res) {
+    state.copy = res.copy;
+    state.files = res.files;
     destroyPads();
     $('#actionbar').hidden = true;
-    $('#brandStep').textContent = 'Submitted';
+    $('#brandStep').textContent = 'PDF ready';
     $('#stepCount').textContent = '✓';
     $('#progress').style.setProperty('--p', 100);
-    const first = String(state.data.fullName || '').trim().split(/\s+/)[0] || 'there';
+    const name = state.data.fullName || '';
+    const first = String(name).trim().split(/\s+/)[0] || 'there';
+    const addrs = MAIL_TO.split(',').map((a) => `<li>${esc(a)}</li>`).join('');
+    const mailto = `mailto:${MAIL_TO}?subject=${encodeURIComponent('Driver Application - ' + name)}&body=${encodeURIComponent('Hello,\n\nPlease find my completed driver application attached (PDF).\n\nName: ' + name)}`;
     app.innerHTML = `<section class="card done">
       <div class="done-icon" aria-hidden="true"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
-      <h1 id="stepTitle" tabindex="-1">Application submitted</h1>
-      <p>Thank you, ${esc(first)}. Righteous and Son Inc has received your application and signed consent forms.</p>
-      ${res.id && res.id !== 'RS-OK' ? `<p>Reference number<br><span class="ref">${esc(res.id)}</span></p>` : ''}
-      ${state.copy ? `<button type="button" class="btn btn-primary" data-action="download">Download my copy (PDF)</button><p class="small">Save this for your records — it will not be shown again after you close this page.</p>` : ''}
+      <h1 id="stepTitle" tabindex="-1">Your PDF is ready</h1>
+      <p>Thank you, ${esc(first)}. Your signed application is ready. <strong>It has not been sent yet</strong> — download the PDF, then email it as an attachment to:</p>
+      <ul class="addr">${addrs}</ul>
+      <button type="button" class="btn btn-submit" data-action="download">Download PDF</button>
+      <div class="row-btns">
+        <button type="button" class="btn btn-secondary btn-small" data-action="preview">Preview PDF</button>
+        <a class="btn btn-secondary btn-small" href="${esc(mailto)}">Open email app</a>
+        <button type="button" class="btn btn-ghost btn-small" data-action="copy-emails">Copy email addresses</button>
+      </div>
+      <div class="row-btns more">
+        <button type="button" class="link-btn" data-action="download-separate">Download as 3 separate files</button>
+        <button type="button" class="link-btn" data-action="edit">Edit my answers</button>
+      </div>
     </section>`;
-    document.title = 'Application submitted — Righteous and Son Inc';
+    document.title = 'Your PDF is ready — Righteous and Son Inc';
     $('#stepTitle').focus({ preventScroll: true });
     window.scrollTo(0, 0);
+    downloadPdf(); // start the download right away; the button below repeats it if the browser blocked it
   }
 
   async function submit() {
@@ -565,7 +606,7 @@
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 90000);
     try {
-      const r = await fetch('/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: ctl.signal });
+      const r = await fetch('/api/pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: ctl.signal });
       res = await r.json().catch(() => null);
       if (!res) res = { ok: false, error: 'Unexpected response from the server. Please try again.' };
     } catch (_) {
@@ -575,9 +616,8 @@
       setBusy(false);
     }
 
-    if (res && res.ok) return showSuccess(res);
+    if (res && res.ok && res.files && res.files.length) return showReady(res);
 
-    state.copy = (res && res.copy) || null;
     if (res && res.fields) {
       renderProblems(findProblemSteps(Object.keys(res.fields)));
       showErrors(Object.fromEntries(Object.entries(res.fields).filter(([k]) => wrapFor(k))));
@@ -653,7 +693,16 @@
     } else if (a === 'goto') {
       goStep(+btn.dataset.step);
     } else if (a === 'download') {
-      if (state.copy) downloadCopy(state.copy);
+      downloadPdf();
+    } else if (a === 'download-separate') {
+      downloadSeparate();
+    } else if (a === 'preview') {
+      previewPdf();
+    } else if (a === 'copy-emails') {
+      const list = MAIL_TO.replace(',', ', ');
+      (navigator.clipboard ? navigator.clipboard.writeText(list) : Promise.reject()).then(() => toast('Email addresses copied'), () => toast(list));
+    } else if (a === 'edit') {
+      goStep(LAST);
     } else if (a === 'dismiss-restore') {
       state.restored = false;
       const b = $('#restoreBanner');
