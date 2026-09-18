@@ -1,0 +1,24 @@
+{
+  "name": "righteous-and-son-application",
+  "version": "1.0.0",
+  "description": "Driver application and consent forms for Righteous and Son Inc",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "DRY_RUN=1 node server.js",
+    "sample": "node scripts/sample.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
+    "nodemailer": "^10.0.10",
+    "pdf-lib": "^1.17.1"
+  },
+  "private": true,
+  "engines": {
+    "node": "22.x"
+  }
+}

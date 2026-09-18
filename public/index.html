@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#14213d">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Driver Application — Righteous and Son Inc</title>
+  <link rel="icon" type="image/png" href="img/icon-192.png">
+  <link rel="apple-touch-icon" href="img/icon-192.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar" id="topbar">
+    <div class="topbar-inner">
+      <img class="brand-logo" src="img/logo.png" alt="Righteous and Son Inc">
+      <div class="brand-text">
+        <div class="brand-title">Driver Application</div>
+        <div class="brand-step" id="brandStep">Righteous and Son Inc</div>
+      </div>
+      <div class="step-count" id="stepCount" aria-hidden="true"></div>
+    </div>
+    <div class="progress" role="progressbar" aria-label="Application progress" aria-valuemin="0" aria-valuemax="100" id="progress"><i></i></div>
+  </header>
+
+  <main id="app" tabindex="-1">
+    <noscript><div class="banner error">This application needs JavaScript. Please enable it or try another browser.</div></noscript>
+  </main>
+
+  <nav class="actionbar" id="actionbar" aria-label="Form navigation" hidden>
+    <div class="actionbar-inner">
+      <button type="button" class="btn btn-secondary" id="backBtn">Back</button>
+      <button type="button" class="btn btn-primary" id="nextBtn">Continue</button>
+    </div>
+  </nav>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <div class="overlay" id="busy" role="alertdialog" aria-modal="true" aria-labelledby="busyText" hidden>
+    <div class="overlay-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <strong id="busyText">Sending your application…</strong>
+      <p>Creating your PDFs and emailing them to Righteous and Son Inc. Please keep this page open.</p>
+    </div>
+  </div>
+
+  <script src="js/consents.js"></script>
+  <script src="js/schema.js"></script>
+  <script src="js/signature.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
