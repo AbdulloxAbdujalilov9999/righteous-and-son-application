@@ -251,3 +251,16 @@ noscript .banner { margin: 16px; }
 .addr { list-style: none; margin: 4px 0 14px; padding: 0; font-weight: 600; overflow-wrap: anywhere; }
 .addr li { margin: 2px 0; }
 .row-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+/* ---------- in-page PDF viewer ---------- */
+.no-scroll { overflow: hidden; }
+.viewer { position: fixed; inset: 0; z-index: 60; background: #4a4f5a; display: flex; flex-direction: column; }
+.viewer-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top)); background: #fff; border-bottom: 1px solid var(--line); }
+.viewer-title { flex: 1; text-align: center; color: var(--navy); }
+.viewer-actions { display: flex; gap: 8px; }
+.viewer-pages { position: relative; flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 12px 0 calc(24px + env(safe-area-inset-bottom)); }
+.vpage { position: relative; margin: 0 auto 12px; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, .35); }
+.vpage canvas { display: block; }
+.viewer-msg { color: #fff; text-align: center; padding: 32px 24px; font-size: 15px; }
+.done .saved { margin-top: 16px; }
+@media (max-width: 420px) { .viewer-title { display: none; } .viewer-bar { justify-content: space-between; } }

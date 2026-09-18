@@ -43,6 +43,18 @@
     </div>
   </div>
 
+  <div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-label="PDF preview" hidden>
+    <div class="viewer-bar">
+      <button type="button" class="btn btn-secondary btn-small" id="viewerBack" data-action="close-viewer">← Close</button>
+      <strong class="viewer-title">Preview</strong>
+      <span class="viewer-actions">
+        <button type="button" class="btn btn-primary btn-small" id="viewerShare" data-action="share" hidden>Share</button>
+        <button type="button" class="btn btn-submit btn-small" data-action="download">Download</button>
+      </span>
+    </div>
+    <div class="viewer-pages" id="viewerPages"></div>
+  </div>
+
   <script src="js/consents.js"></script>
   <script src="js/schema.js"></script>
   <script src="js/signature.js"></script>

@@ -78,7 +78,7 @@
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try {
-        const { ssn, ...rest } = state.data; // never keep the SSN on the device
+        const rest = state.data; // everything stays on this device (7 days) so a failed share never means re-typing
         localStorage.setItem(DRAFT_KEY, JSON.stringify({ ts: Date.now(), step: state.step, data: rest, sig: state.sig, linked: state.linked }));
       } catch (_) { /* ignore quota / private mode */ }
     }, 350);
@@ -297,7 +297,7 @@
     const step = STEPS[state.step];
     let html = '';
     if (state.restored) {
-      html += `<div class="banner info" id="restoreBanner"><p><strong>Welcome back.</strong> We restored your saved answers on this device. For your security your SSN is never saved — please enter it again.</p><div class="row"><button type="button" class="link-btn" data-action="dismiss-restore">Dismiss</button><button type="button" class="link-btn" data-action="reset">Start over</button></div></div>`;
+      html += `<div class="banner info" id="restoreBanner"><p><strong>Welcome back.</strong> We restored the answers you saved on this device, so you can carry on where you stopped.</p><div class="row"><button type="button" class="link-btn" data-action="dismiss-restore">Dismiss</button><button type="button" class="link-btn" data-action="reset">Start over</button></div></div>`;
     }
     html += `<h1 class="step-title" id="stepTitle" tabindex="-1">${esc(step.title)}</h1><p class="step-lead" id="stepLead">${esc(leadFor(step))}</p>`;
     if (step.kind === 'consent') html += consentStepHTML(step);
@@ -531,7 +531,6 @@
   function downloadPdf() {
     if (!state.copy) return;
     saveFile(state.copy);
-    clearDraft();
   }
 
   /** Downloads the three forms as separate PDFs (the PSP form as its own stand-alone document). */
@@ -541,16 +540,100 @@
       saveFile(f);
       await new Promise((r) => setTimeout(r, 700));
     }
-    clearDraft();
   }
 
-  /** Opens the PDF in the browser's viewer (which has its own Save / Share options on phones). */
-  function previewPdf() {
+  /* ---------------------------------------------------------------- in-page PDF viewer (pdf.js) */
+  let pdfJsLoading = null;
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve();
+    if (!pdfJsLoading) {
+      pdfJsLoading = new Promise((resolve, reject) => {
+        const el = document.createElement('script');
+        el.src = 'vendor/pdfjs/pdf.min.js';
+        el.onload = () => {
+          if (!window.pdfjsLib) return reject(new Error('pdf.js missing'));
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js';
+          resolve();
+        };
+        el.onerror = () => { pdfJsLoading = null; reject(new Error('Could not load the PDF viewer')); };
+        document.head.appendChild(el);
+      });
+    }
+    return pdfJsLoading;
+  }
+
+  const viewer = $('#viewer');
+  let viewerDoc = null;
+
+  function hideViewer() {
+    viewer.hidden = true;
+    $('#viewerPages').innerHTML = '';
+    document.body.classList.remove('no-scroll');
+    app.inert = false;
+    if (viewerDoc) { try { viewerDoc.destroy(); } catch (_) { /* ignore */ } viewerDoc = null; }
+  }
+
+  function closeViewer() {
+    if (history.state && history.state.viewer) history.back(); // popstate hides it
+    else hideViewer();
+  }
+
+  /** Shows the PDF inside the page, on every device (no reliance on the browser's own PDF support). */
+  async function previewPdf() {
     if (!state.copy) return;
-    const url = blobUrl(state.copy);
-    const w = window.open(url, '_blank');
-    if (!w) location.href = url;
-    setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
+    const pages = $('#viewerPages');
+    pages.innerHTML = '<p class="viewer-msg">Loading preview…</p>';
+    viewer.hidden = false;
+    document.body.classList.add('no-scroll');
+    app.inert = true;
+    $('#viewerBack').focus();
+    try { history.pushState({ step: LAST, ready: true, viewer: true }, ''); } catch (_) { /* ignore */ }
+    const canShare = canShareFiles(state.shareFiles);
+    $('#viewerShare').hidden = !canShare;
+    try {
+      await loadPdfJs();
+      const doc = await window.pdfjsLib.getDocument({ data: state.copy.bytes.slice(), isEvalSupported: false }).promise; // .slice(): pdf.js takes ownership of the buffer
+      if (viewer.hidden) { doc.destroy(); return; }
+      viewerDoc = doc;
+      pages.innerHTML = '';
+      const cssW = Math.min(pages.clientWidth - 24, 820);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const pending = [];
+      const pump = () => { // draw pages that are (nearly) on screen; the rest wait until scrolled near
+        const limit = pages.scrollTop + pages.clientHeight + 900;
+        for (let i = pending.length - 1; i >= 0; i--) {
+          if (pending[i].offsetTop <= limit) pending.splice(i, 1)[0]._render();
+        }
+      };
+      pages.onscroll = pump;
+      for (let n = 1; n <= doc.numPages; n++) {
+        const page = await doc.getPage(n);
+        const base = page.getViewport({ scale: 1 });
+        const scale = cssW / base.width;
+        const box = document.createElement('div');
+        box.className = 'vpage';
+        box.style.width = cssW + 'px';
+        box.style.height = Math.round(base.height * scale) + 'px';
+        box.setAttribute('aria-label', 'Page ' + n + ' of ' + doc.numPages);
+        box._render = async () => {
+          const vp = page.getViewport({ scale: scale * dpr });
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.floor(vp.width);
+          canvas.height = Math.floor(vp.height);
+          canvas.style.width = '100%';
+          canvas.style.height = '100%';
+          box.appendChild(canvas);
+          try { await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise; } catch (_) { /* viewer closed */ }
+        };
+        pages.appendChild(box);
+        pending.push(box);
+      }
+      pending.reverse(); // keep page order so pump() finds the earliest first
+      pump();
+    } catch (err) {
+      console.error('Preview failed:', err);
+      pages.innerHTML = '<p class="viewer-msg">The preview could not be shown on this device. You can still use <strong>Download PDF</strong> — the file is fine.</p>';
+    }
   }
 
   const canShareFiles = (files) => typeof navigator.share === 'function' && typeof navigator.canShare === 'function' && !!files && navigator.canShare({ files });
@@ -564,16 +647,17 @@
       return;
     }
     const name = state.data.fullName || '';
+    const t0 = Date.now();
     navigator.share({
       files: state.shareFiles,
       title: 'Driver Application - ' + name,
       text: `Driver application, Background Check and PSP consent for ${name}. Please send to: ${MAIL_TO.replace(',', ', ')}`,
     }).then(() => {
-      clearDraft();
-      toast('Shared — thank you!');
+      // Some browsers answer "done" instantly without ever showing a menu.
+      if (Date.now() - t0 < 600) toast('No share menu appeared — use Download PDF or Open Gmail below');
     }).catch((e) => {
       if (e && e.name === 'AbortError') return; // they closed the share sheet
-      toast('Could not open the share menu. Tap Download instead.');
+      toast('Could not open the share menu — use Download PDF or Open Gmail below');
     });
   }
 
@@ -590,6 +674,7 @@
     state.result = res;
     state.shareFiles = res.files.map((f) => new File([f.bytes], f.filename, { type: 'application/pdf' }));
     destroyPads();
+    saveDraft();
     $('#actionbar').hidden = true;
     $('#brandStep').textContent = 'PDF ready';
     $('#stepCount').textContent = '✓';
@@ -598,7 +683,10 @@
     const first = String(name).trim().split(/\s+/)[0] || 'there';
     const canShare = canShareFiles(state.shareFiles);
     const addrs = MAIL_TO.split(',').map((a) => `<li>${esc(a)}</li>`).join('');
-    const mailto = `mailto:${MAIL_TO}?subject=${encodeURIComponent('Driver Application - ' + name)}&body=${encodeURIComponent('Hello,\n\nPlease find my completed driver application attached (PDF).\n\nName: ' + name)}`;
+    const subject = 'Driver Application - ' + name;
+    const body = 'Hello,\n\nPlease find my completed driver application attached (PDF).\n\nName: ' + name;
+    const mailto = `mailto:${MAIL_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const gmail = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(MAIL_TO)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     app.innerHTML = `<section class="card done">
       <div class="done-icon" aria-hidden="true"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
       <h1 id="stepTitle" tabindex="-1">Your PDF is ready</h1>
@@ -608,13 +696,17 @@
       <div class="row-btns">
         ${canShare ? '<button type="button" class="btn btn-secondary btn-small" data-action="download">Download PDF</button>' : ''}
         <button type="button" class="btn btn-secondary btn-small" data-action="preview">Preview PDF</button>
+        <a class="btn btn-secondary btn-small" href="${esc(gmail)}" target="_blank" rel="noopener">Open Gmail</a>
         <a class="btn btn-secondary btn-small" href="${esc(mailto)}">Open email app</a>
         <button type="button" class="btn btn-ghost btn-small" data-action="copy-emails">Copy email addresses</button>
       </div>
+      <p class="small">Email apps cannot attach the PDF for you \u2014 download it first, then attach it to the email.</p>
       <div class="row-btns more">
         <button type="button" class="link-btn" data-action="download-separate">Download as 3 separate files</button>
         <button type="button" class="link-btn" data-action="edit">Edit my answers</button>
       </div>
+      <p class="small saved">Your answers are saved on this device, so you will not have to type them again if something goes wrong.
+        <button type="button" class="link-btn" data-action="reset">Erase my data from this device</button></p>
     </section>`;
     document.title = 'Your PDF is ready — Righteous and Son Inc';
     $('#stepTitle').focus({ preventScroll: true });
@@ -691,7 +783,7 @@
     validateOne(path);
   });
 
-  app.addEventListener('click', (e) => {
+  const onAction = (e) => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const a = btn.dataset.action;
@@ -728,6 +820,8 @@
       downloadSeparate();
     } else if (a === 'preview') {
       previewPdf();
+    } else if (a === 'close-viewer') {
+      closeViewer();
     } else if (a === 'copy-emails') {
       const list = MAIL_TO.replace(',', ', ');
       (navigator.clipboard ? navigator.clipboard.writeText(list) : Promise.reject()).then(() => toast('Email addresses copied'), () => toast(list));
@@ -743,13 +837,17 @@
         location.reload();
       }
     }
-  });
+  };
+  app.addEventListener('click', onAction);
+  viewer.addEventListener('click', onAction);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !viewer.hidden) closeViewer(); });
 
   $('#nextBtn').addEventListener('click', onNext);
   $('#backBtn').addEventListener('click', () => { if (!state.busy && state.step > 0) goStep(state.step - 1); });
   window.addEventListener('popstate', (e) => {
     if (state.busy) return;
     const st = e.state || {};
+    if (!viewer.hidden) { hideViewer(); return; } // Back closes the preview and stays on the "PDF ready" screen
     if (st.ready && state.result) {
       showReady(state.result, { push: false });
       return;

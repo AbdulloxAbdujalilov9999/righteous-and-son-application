@@ -5,8 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build": "esbuild lib/pdf/browser.js --bundle --minify --format=iife --platform=browser --target=es2019 --outfile=public/js/pdf.bundle.js",
-    "sample": "node scripts/sample.js"
+    "build": "esbuild lib/pdf/browser.js --bundle --minify --format=iife --platform=browser --target=es2019 --outfile=public/js/pdf.bundle.js && npm run vendor",
+    "sample": "node scripts/sample.js",
+    "vendor": "mkdir -p public/vendor/pdfjs && cp node_modules/pdfjs-dist/build/pdf.min.js node_modules/pdfjs-dist/build/pdf.worker.min.js public/vendor/pdfjs/"
   },
   "keywords": [],
   "author": "",
@@ -21,6 +22,7 @@
     "node": "22.x"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "pdfjs-dist": "^3.11.174"
   }
 }

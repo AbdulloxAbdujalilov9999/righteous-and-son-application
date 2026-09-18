@@ -7,8 +7,8 @@ the **Background Check** and **PSP** consent forms, then reviews and signs. At t
 The applicant then shares it:
 
 - **Share PDF** — opens the phone's share menu (Gmail, Mail, WhatsApp, …); on browsers without one it becomes **Download PDF**.
-- **Preview PDF** — opens the browser's PDF viewer (which has its own Save/Share options).
-- **Open email app** — a pre-addressed email; the applicant just attaches the file.
+- **Preview PDF** — shows the PDF inside the page (works on every device; has Share/Download buttons of its own).
+- **Open Gmail / Open email app** — a pre-addressed email; the applicant just attaches the downloaded file.
 - **Copy email addresses**, **Download as 3 separate files**, **Edit my answers**.
 
 They send it to:
@@ -47,10 +47,10 @@ npm run sample     # writes sample PDFs to ./out/sample to check the layout
 
 ## How it is built
 - `public/` — the static site. `js/schema.js` defines every question once; the form, validation and PDF all read it, so they cannot drift apart. `js/consents.js` holds the consent wording (from the original PDFs).
-- `lib/pdf/` — PDF layout (pdf-lib). `browser.js` is the browser entry (bundled by esbuild); `node.js` is used by `scripts/sample.js`. Fonts are in `public/fonts/` (Arimo/Tinos ≈ Arial/Times, incl. Cyrillic + Uzbek `ʻ`).
+- `public/vendor/pdfjs/` — pdf.js (Apache-2.0), used only for the in-page preview. `lib/pdf/` — PDF layout (pdf-lib). `browser.js` is the browser entry (bundled by esbuild); `node.js` is used by `scripts/sample.js`. Fonts are in `public/fonts/` (Arimo/Tinos ≈ Arial/Times, incl. Cyrillic + Uzbek `ʻ`).
 
 ## Good to know
-- **Privacy:** the PDFs contain the applicant's SSN. Nothing is stored or sent by the site. Progress is auto-saved in the applicant's own browser for 7 days (the SSN is never saved) and erased after sharing/downloading.
+- **Privacy:** the PDFs contain the applicant's SSN. Nothing is stored or sent by the site. Everything the applicant enters (including the SSN) is auto-saved in their own browser for 7 days so they never have to fill the form twice if sharing fails. It is only erased when they tap **Erase my data from this device** (or after 7 days).
 - **iPhones** only open the share menu from a tap, which is why Share is its own button on the "PDF is ready" screen.
 - **Changing wording:** edit `public/js/consents.js` (consent text) or `public/js/schema.js` (questions), then `npm run build`. The PSP text is FMCSA-mandated — do not reword it.
 - **Automatic email** (Gmail/Brevo) was removed to keep the site simple and dependable. It is in the git history (commit `4f5dbfd`) if you ever want it back.
