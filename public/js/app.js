@@ -6,17 +6,17 @@
   const { SignaturePad, toPNG } = window.RSSignaturePad;
   const STEPS = S.STEPS;
   const LAST = STEPS.length - 1;
-  const DRAFT_KEY = 'rs_application_draft_v1';
+  const DRAFT_KEY = 'rs_application_draft_v2'; // v2: step order changed (application first)
   const MAIL_TO = 'righteousandson.inc@gmail.com,jscott.righteousandson@gmail.com';
 
   const LEAD = {
     background: 'Read the authorization below, then sign at the bottom. You only draw your signature once — we reuse it on the other forms, and you can change it there.',
     psp: 'This is the required FMCSA disclosure. Please read it, then sign at the bottom.',
-    about: 'Tell us about yourself and the job you are applying for.',
+    about: 'Start here: tell us about yourself and the job you are applying for. Next come the consent forms, which you sign.',
     licenses: 'Your driving experience and license details.',
     history: 'List your work for the last 10 years, starting with the most recent.',
     record: 'Answer every question. If you answer Yes, we will ask for details.',
-    sign: 'Check everything, agree to the statements, and sign to submit.',
+    sign: 'Check everything, agree to the statements, and sign.',
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -34,6 +34,8 @@
     restored: false,
     copy: null,
     files: null,
+    result: null,
+    emailEnabled: false,
     pads: {},
     busy: false,
   };
@@ -214,18 +216,12 @@
 
   function consentStepHTML(step) {
     if (step.doc === 'background') {
-      const nameField = S.SECTIONS.personal.fields.find((f) => f.id === 'fullName');
-      return `<section class="card">${fieldsHTMLSingle(nameField, 'Your full legal name')}</section>
-        <section class="card legal">${blocksHTML(C.BACKGROUND_CHECK.blocks)}</section>
+      return `<section class="card legal">${blocksHTML(C.BACKGROUND_CHECK.blocks)}</section>
         <section class="card">${sigBoxHTML('background', 'Your signature')}<p class="small">By signing, I agree to the Background Check authorization above.</p></section>`;
     }
     return `<section class="card legal"><p class="banner-text">${esc(C.PSP.banner)}</p>${blocksHTML(C.PSP.blocks)}</section>
       <section class="card">${sigBoxHTML('psp', 'Your signature')}<p class="small">By signing, I agree to the PSP Disclosure and Authorization above.</p></section>
       <section class="card legal"><p class="notice">${C.PSP.notices.map(esc).join('</p><p class="notice">')}</p></section>`;
-  }
-
-  function fieldsHTMLSingle(f, label) {
-    return `<div class="grid">${fieldHTML(f, f.id, S.SECTIONS.personal, null, label).replace('class="field"', 'class="field wide"')}</div>`;
   }
 
   function reviewHTML() {
@@ -291,6 +287,11 @@
     saveDraft();
   }
 
+  function leadFor(step) {
+    if (step.kind === 'review') return LEAD.sign + (state.emailEnabled ? ' Then tap Submit application to send it to Righteous and Son Inc.' : ' Then tap Download PDF to get your finished application.');
+    return LEAD[step.id] || '';
+  }
+
   function render({ focusTitle = false } = {}) {
     destroyPads();
     const step = STEPS[state.step];
@@ -298,7 +299,7 @@
     if (state.restored) {
       html += `<div class="banner info" id="restoreBanner"><p><strong>Welcome back.</strong> We restored your saved answers on this device. For your security your SSN is never saved — please enter it again.</p><div class="row"><button type="button" class="link-btn" data-action="dismiss-restore">Dismiss</button><button type="button" class="link-btn" data-action="reset">Start over</button></div></div>`;
     }
-    html += `<h1 class="step-title" id="stepTitle" tabindex="-1">${esc(step.title)}</h1><p class="step-lead">${esc(LEAD[step.id] || '')}</p>`;
+    html += `<h1 class="step-title" id="stepTitle" tabindex="-1">${esc(step.title)}</h1><p class="step-lead" id="stepLead">${esc(leadFor(step))}</p>`;
     if (step.kind === 'consent') html += consentStepHTML(step);
     else if (step.kind === 'review') html += reviewHTML();
     else {
@@ -327,7 +328,7 @@
     const back = $('#backBtn');
     const next = $('#nextBtn');
     back.hidden = state.step === 0;
-    next.textContent = state.step === LAST ? 'Download PDF' : 'Continue';
+    next.textContent = state.step === LAST ? (state.emailEnabled ? 'Submit application' : 'Download PDF') : 'Continue';
     next.classList.toggle('btn-submit', state.step === LAST);
     next.classList.toggle('btn-primary', state.step !== LAST);
     $('#actionbar').hidden = false;
@@ -421,12 +422,6 @@
     const step = STEPS[i];
     const errs = {};
     if (step.kind === 'consent') {
-      if (i === 0) {
-        const nameField = S.SECTIONS.personal.fields.find((f) => f.id === 'fullName');
-        const m = S.validateField(nameField, state.data.fullName, state.data, state.data);
-        if (m) errs.fullName = m;
-        else if (String(state.data.fullName).trim().split(/\s+/).length < 2) errs.fullName = 'Enter your first and last name';
-      }
       if (!state.sig[step.doc].length) errs['sig_' + step.doc] = 'Please sign in the box above';
     } else if (step.kind === 'review') {
       C.ACKNOWLEDGEMENTS.forEach((a) => { if (!state.data[a.id]) errs[a.id] = 'Please check the box to continue'; });
@@ -545,13 +540,16 @@
   function showSubmitError(message) {
     const box = $('#submitError');
     if (!box) return;
-    box.innerHTML = `<div class="banner error"><p><strong>${esc(message)}</strong></p><p>Your answers are still on this page — tap the button to try again.</p></div>`;
+    const name = state.data.fullName || '';
+    const mailto = `mailto:${MAIL_TO}?subject=${encodeURIComponent('Driver Application - ' + name)}&body=${encodeURIComponent('Hello,\n\nPlease find my completed driver application attached (PDF).\n\nName: ' + name)}`;
+    box.innerHTML = `<div class="banner error"><p><strong>${esc(message)}</strong></p><p>Your answers are still on this page \u2014 you can try again${state.copy ? ', or save the PDF and email it yourself' : ''}.</p>${state.copy ? `<div class="row"><button type="button" class="btn btn-secondary btn-small" data-action="download">Download PDF</button><a class="btn btn-secondary btn-small" href="${esc(mailto)}">Open email app</a></div>` : ''}</div>`;
     box.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  function showReady(res) {
+  function showReady(res, { auto = true, push = true } = {}) {
     state.copy = res.copy;
     state.files = res.files;
+    state.result = res;
     destroyPads();
     $('#actionbar').hidden = true;
     $('#brandStep').textContent = 'PDF ready';
@@ -559,6 +557,23 @@
     $('#progress').style.setProperty('--p', 100);
     const name = state.data.fullName || '';
     const first = String(name).trim().split(/\s+/)[0] || 'there';
+    if (res.sent) {
+      app.innerHTML = `<section class="card done">
+        <div class="done-icon" aria-hidden="true"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        <h1 id="stepTitle" tabindex="-1">Application submitted</h1>
+        <p>Thank you, ${esc(first)}. Righteous and Son Inc has received your application and signed consent forms.</p>
+        ${res.id && res.id !== 'RS-OK' ? `<p>Reference number<br><span class="ref">${esc(res.id)}</span></p>` : ''}
+        <button type="button" class="btn btn-primary" data-action="download">Download my copy (PDF)</button>
+        <p class="small">Keep a copy for your records.</p>
+      </section>`;
+      $('#brandStep').textContent = 'Submitted';
+      document.title = 'Application submitted \u2014 Righteous and Son Inc';
+      $('#stepTitle').focus({ preventScroll: true });
+      window.scrollTo(0, 0);
+      if (push) { try { history.pushState({ step: LAST, ready: true }, ''); } catch (_) { /* ignore */ } }
+      clearDraft();
+      return;
+    }
     const addrs = MAIL_TO.split(',').map((a) => `<li>${esc(a)}</li>`).join('');
     const mailto = `mailto:${MAIL_TO}?subject=${encodeURIComponent('Driver Application - ' + name)}&body=${encodeURIComponent('Hello,\n\nPlease find my completed driver application attached (PDF).\n\nName: ' + name)}`;
     app.innerHTML = `<section class="card done">
@@ -580,13 +595,13 @@
     document.title = 'Your PDF is ready — Righteous and Son Inc';
     $('#stepTitle').focus({ preventScroll: true });
     window.scrollTo(0, 0);
-    downloadPdf(); // start the download right away; the button below repeats it if the browser blocked it
+    if (push) { try { history.pushState({ step: LAST, ready: true }, ''); } catch (_) { /* ignore */ } } // so Back returns to Review
+    if (auto) downloadPdf(); // start the download right away; the button below repeats it if the browser blocked it
   }
 
   async function submit() {
     const errs = stepErrors(LAST);
     const earlier = findProblemSteps();
-    if (!state.sig.background.length && !earlier.includes(0)) earlier.unshift(0);
     if (Object.keys(errs).length || earlier.length) {
       showErrors(errs);
       renderProblems(earlier);
@@ -616,7 +631,9 @@
       setBusy(false);
     }
 
-    if (res && res.ok && res.files && res.files.length) return showReady(res);
+    if (res && res.ok && (res.sent || (res.files && res.files.length))) return showReady(res);
+
+    state.copy = (res && res.copy) || null;
 
     if (res && res.fields) {
       renderProblems(findProblemSteps(Object.keys(res.fields)));
@@ -719,13 +736,19 @@
   $('#backBtn').addEventListener('click', () => { if (!state.busy && state.step > 0) goStep(state.step - 1); });
   window.addEventListener('popstate', (e) => {
     if (state.busy) return;
-    const s = e.state && typeof e.state.step === 'number' ? e.state.step : 0;
-    state.step = s;
+    const st = e.state || {};
+    if (st.ready && state.result) {
+      showReady(state.result, { auto: false, push: false });
+      return;
+    }
+    state.step = typeof st.step === 'number' ? st.step : 0;
     render({ focusTitle: true });
     window.scrollTo(0, 0);
   });
 
   /* ---------------------------------------------------------------- start */
+  // Is automatic email set up? Decides whether the last button says "Submit application" or "Download PDF".
+  fetch('/api/pdf').then((r) => r.json()).then((j) => { state.emailEnabled = !!(j && j.emailEnabled); updateChrome(); const l = $('#stepLead'); if (l && STEPS[state.step].kind === 'review') l.textContent = leadFor(STEPS[state.step]); }).catch(() => {});
   loadDraft();
   syncRepeats();
   try { history.replaceState({ step: state.step }, ''); } catch (_) { /* ignore */ }

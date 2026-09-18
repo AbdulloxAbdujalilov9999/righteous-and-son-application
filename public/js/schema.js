@@ -253,14 +253,15 @@
     },
   };
 
-  // Wizard steps. `sections` reference SECTIONS ids above.
+  // Wizard steps. The Driver Application comes first, then the consent forms, then review & sign.
+  // `sections` reference SECTIONS ids above.
   const STEPS = [
-    { id: 'background', title: 'Background Check', short: 'Background', kind: 'consent', doc: 'background' },
-    { id: 'psp', title: 'PSP Disclosure', short: 'PSP', kind: 'consent', doc: 'psp' },
     { id: 'about', title: 'About You', short: 'About you', sections: ['personal', 'company'] },
     { id: 'licenses', title: 'Experience & Licenses', short: 'Licenses', sections: ['experience', 'license1', 'license2'] },
     { id: 'history', title: 'Work History', short: 'History', sections: ['work', 'school_q', 'school'] },
     { id: 'record', title: 'Driving Record', short: 'Record', sections: ['fmcsr', 'accident_q', 'accidents', 'violations'] },
+    { id: 'background', title: 'Background Check', short: 'Background', kind: 'consent', doc: 'background' },
+    { id: 'psp', title: 'PSP Disclosure', short: 'PSP', kind: 'consent', doc: 'psp' },
     { id: 'sign', title: 'Review & Sign', short: 'Sign', kind: 'review' },
   ];
 
