@@ -1,14 +1,12 @@
-/* Local dev server: static files from ./public and POST /api/pdf (same handler Vercel runs). */
+/* Tiny local static server for development: `npm start` -> http://localhost:3000 (the site is 100% static). */
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
-const { handlePdf } = require('./lib/handler');
-
 const PUBLIC = path.join(__dirname, 'public');
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json',
+  '.png': 'image/png', '.ttf': 'font/ttf', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8',
 };
 const HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -16,12 +14,10 @@ const HEADERS = {
   'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
 };
 
-const server = http.createServer((req, res) => {
+http.createServer((req, res) => {
   Object.entries(HEADERS).forEach(([k, v]) => res.setHeader(k, v));
   const url = new URL(req.url, 'http://localhost');
-  if (url.pathname === '/api/pdf') return handlePdf(req, res);
-
-  let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname)));
+  const file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname)));
   if (!file.startsWith(PUBLIC + path.sep)) {
     res.statusCode = 403;
     return res.end('Forbidden');
@@ -35,9 +31,4 @@ const server = http.createServer((req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.end(data);
   });
-});
-
-const port = Number(process.env.PORT || 3000);
-server.listen(port, () => {
-  console.log(`Righteous and Son application → http://localhost:${port}`);
-});
+}).listen(Number(process.env.PORT || 3000), () => console.log(`Righteous and Son application → http://localhost:${process.env.PORT || 3000}`));

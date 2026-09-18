@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const S = require('../public/js/schema.js');
-const { buildAll, buildCombined } = require('../lib/pdf');
+const { buildAll, buildCombined } = require('../lib/pdf/node');
 
 /** Tiny PNG writer: draws a wavy "signature" stroke on a transparent canvas. */
 function fakeSignature(w = 600, h = 200) {

@@ -35,7 +35,7 @@
     copy: null,
     files: null,
     result: null,
-    emailEnabled: false,
+    shareFiles: null,
     pads: {},
     busy: false,
   };
@@ -288,7 +288,7 @@
   }
 
   function leadFor(step) {
-    if (step.kind === 'review') return LEAD.sign + (state.emailEnabled ? ' Then tap Submit application to send it to Righteous and Son Inc.' : ' Then tap Download PDF to get your finished application.');
+    if (step.kind === 'review') return LEAD.sign + ' Then tap Create my PDF \u2014 you can share it or download it.';
     return LEAD[step.id] || '';
   }
 
@@ -315,6 +315,7 @@
     mountPads();
     applyVisibility();
     updateChrome();
+    if (step.kind === 'review') loadPdfTools().catch(() => {}); // start downloading the PDF tools now
     if (focusTitle) $('#stepTitle').focus({ preventScroll: true });
   }
 
@@ -328,7 +329,7 @@
     const back = $('#backBtn');
     const next = $('#nextBtn');
     back.hidden = state.step === 0;
-    next.textContent = state.step === LAST ? (state.emailEnabled ? 'Submit application' : 'Download PDF') : 'Continue';
+    next.textContent = state.step === LAST ? 'Create my PDF' : 'Continue';
     next.classList.toggle('btn-submit', state.step === LAST);
     next.classList.toggle('btn-primary', state.step !== LAST);
     $('#actionbar').hidden = false;
@@ -488,16 +489,31 @@
     app.inert = on;
   }
 
-  function b64ToBlob(b64, type) {
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new Blob([bytes], { type });
+  /* ---------------------------------------------------------------- PDF (built entirely in the browser) */
+  let pdfToolsLoading = null;
+  function loadPdfTools() {
+    if (window.RSPdf) return Promise.resolve();
+    if (!pdfToolsLoading) {
+      pdfToolsLoading = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'js/pdf.bundle.js';
+        s.onload = () => (window.RSPdf ? resolve() : reject(new Error('PDF tools missing')));
+        s.onerror = () => { pdfToolsLoading = null; reject(new Error('Could not load the PDF tools')); };
+        document.head.appendChild(s);
+      });
+    }
+    return pdfToolsLoading;
   }
 
-  function blobUrl(file) {
-    return URL.createObjectURL(b64ToBlob(file.base64, 'application/pdf'));
+  function dataUrlToBytes(url) {
+    const bin = atob(String(url).split(',')[1] || '');
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
   }
+
+  const newId = () => 'RS-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+  const blobUrl = (file) => URL.createObjectURL(new Blob([file.bytes], { type: 'application/pdf' }));
 
   function saveFile(file) {
     const url = blobUrl(file);
@@ -537,19 +553,42 @@
     setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
   }
 
+  const canShareFiles = (files) => typeof navigator.share === 'function' && typeof navigator.canShare === 'function' && !!files && navigator.canShare({ files });
+
+  /** Opens the phone's share sheet. Must be called straight from a tap (nothing awaited before it). */
+  function sharePdf() {
+    if (!state.shareFiles) return;
+    if (!canShareFiles(state.shareFiles)) {
+      downloadPdf();
+      toast('Saved to your device — now attach it to an email');
+      return;
+    }
+    const name = state.data.fullName || '';
+    navigator.share({
+      files: state.shareFiles,
+      title: 'Driver Application - ' + name,
+      text: `Driver application, Background Check and PSP consent for ${name}. Please send to: ${MAIL_TO.replace(',', ', ')}`,
+    }).then(() => {
+      clearDraft();
+      toast('Shared — thank you!');
+    }).catch((e) => {
+      if (e && e.name === 'AbortError') return; // they closed the share sheet
+      toast('Could not open the share menu. Tap Download instead.');
+    });
+  }
+
   function showSubmitError(message) {
     const box = $('#submitError');
     if (!box) return;
-    const name = state.data.fullName || '';
-    const mailto = `mailto:${MAIL_TO}?subject=${encodeURIComponent('Driver Application - ' + name)}&body=${encodeURIComponent('Hello,\n\nPlease find my completed driver application attached (PDF).\n\nName: ' + name)}`;
-    box.innerHTML = `<div class="banner error"><p><strong>${esc(message)}</strong></p><p>Your answers are still on this page \u2014 you can try again${state.copy ? ', or save the PDF and email it yourself' : ''}.</p>${state.copy ? `<div class="row"><button type="button" class="btn btn-secondary btn-small" data-action="download">Download PDF</button><a class="btn btn-secondary btn-small" href="${esc(mailto)}">Open email app</a></div>` : ''}</div>`;
+    box.innerHTML = `<div class="banner error"><p><strong>${esc(message)}</strong></p><p>Your answers are still on this page — tap the button to try again.</p></div>`;
     box.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  function showReady(res, { auto = true, push = true } = {}) {
+  function showReady(res, { push = true } = {}) {
     state.copy = res.copy;
     state.files = res.files;
     state.result = res;
+    state.shareFiles = res.files.map((f) => new File([f.bytes], f.filename, { type: 'application/pdf' }));
     destroyPads();
     $('#actionbar').hidden = true;
     $('#brandStep').textContent = 'PDF ready';
@@ -557,32 +596,17 @@
     $('#progress').style.setProperty('--p', 100);
     const name = state.data.fullName || '';
     const first = String(name).trim().split(/\s+/)[0] || 'there';
-    if (res.sent) {
-      app.innerHTML = `<section class="card done">
-        <div class="done-icon" aria-hidden="true"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
-        <h1 id="stepTitle" tabindex="-1">Application submitted</h1>
-        <p>Thank you, ${esc(first)}. Righteous and Son Inc has received your application and signed consent forms.</p>
-        ${res.id && res.id !== 'RS-OK' ? `<p>Reference number<br><span class="ref">${esc(res.id)}</span></p>` : ''}
-        <button type="button" class="btn btn-primary" data-action="download">Download my copy (PDF)</button>
-        <p class="small">Keep a copy for your records.</p>
-      </section>`;
-      $('#brandStep').textContent = 'Submitted';
-      document.title = 'Application submitted \u2014 Righteous and Son Inc';
-      $('#stepTitle').focus({ preventScroll: true });
-      window.scrollTo(0, 0);
-      if (push) { try { history.pushState({ step: LAST, ready: true }, ''); } catch (_) { /* ignore */ } }
-      clearDraft();
-      return;
-    }
+    const canShare = canShareFiles(state.shareFiles);
     const addrs = MAIL_TO.split(',').map((a) => `<li>${esc(a)}</li>`).join('');
     const mailto = `mailto:${MAIL_TO}?subject=${encodeURIComponent('Driver Application - ' + name)}&body=${encodeURIComponent('Hello,\n\nPlease find my completed driver application attached (PDF).\n\nName: ' + name)}`;
     app.innerHTML = `<section class="card done">
       <div class="done-icon" aria-hidden="true"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
       <h1 id="stepTitle" tabindex="-1">Your PDF is ready</h1>
-      <p>Thank you, ${esc(first)}. Your signed application is ready. <strong>It has not been sent yet</strong> — download the PDF, then email it as an attachment to:</p>
+      <p>Thank you, ${esc(first)}. Your signed application is ready. <strong>It has not been sent yet</strong> — ${canShare ? 'tap Share PDF and choose Gmail, Mail, WhatsApp or another app, and send it to:' : 'download the PDF, then email it as an attachment to:'}</p>
       <ul class="addr">${addrs}</ul>
-      <button type="button" class="btn btn-submit" data-action="download">Download PDF</button>
+      ${canShare ? '<button type="button" class="btn btn-submit" data-action="share">Share PDF</button>' : '<button type="button" class="btn btn-submit" data-action="download">Download PDF</button>'}
       <div class="row-btns">
+        ${canShare ? '<button type="button" class="btn btn-secondary btn-small" data-action="download">Download PDF</button>' : ''}
         <button type="button" class="btn btn-secondary btn-small" data-action="preview">Preview PDF</button>
         <a class="btn btn-secondary btn-small" href="${esc(mailto)}">Open email app</a>
         <button type="button" class="btn btn-ghost btn-small" data-action="copy-emails">Copy email addresses</button>
@@ -596,7 +620,6 @@
     $('#stepTitle').focus({ preventScroll: true });
     window.scrollTo(0, 0);
     if (push) { try { history.pushState({ step: LAST, ready: true }, ''); } catch (_) { /* ignore */ } } // so Back returns to Review
-    if (auto) downloadPdf(); // start the download right away; the button below repeats it if the browser blocked it
   }
 
   async function submit() {
@@ -609,39 +632,27 @@
       return;
     }
 
-    const payload = {
-      values: { ...state.data, signedDate: S.isoToday() },
-      signatures: { background: toPNG(state.sig.background), psp: toPNG(state.sig.psp), final: toPNG(state.sig.final) },
-      website: ($('#website') || {}).value || '',
-    };
-
     setBusy(true);
-    let res = null;
-    let networkFail = false;
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 90000);
     try {
-      const r = await fetch('/api/pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: ctl.signal });
-      res = await r.json().catch(() => null);
-      if (!res) res = { ok: false, error: 'Unexpected response from the server. Please try again.' };
-    } catch (_) {
-      networkFail = true;
-    } finally {
-      clearTimeout(timer);
+      await loadPdfTools();
+      const values = { ...state.data, signedDate: S.isoToday() };
+      const signatures = {
+        background: dataUrlToBytes(toPNG(state.sig.background)),
+        psp: dataUrlToBytes(toPNG(state.sig.psp)),
+        final: dataUrlToBytes(toPNG(state.sig.final)),
+      };
+      const id = newId();
+      const files = await window.RSPdf.buildAll({ values, submittedAt: new Date(), id, ip: null }, signatures);
+      const copy = await window.RSPdf.buildCombined(files, values.fullName);
       setBusy(false);
+      showReady({ id, files, copy });
+    } catch (err) {
+      setBusy(false);
+      console.error('PDF creation failed:', err);
+      showSubmitError(navigator.onLine === false
+        ? 'You appear to be offline. Check your internet connection and try again.'
+        : 'We could not create your PDF. Please try again.');
     }
-
-    if (res && res.ok && (res.sent || (res.files && res.files.length))) return showReady(res);
-
-    state.copy = (res && res.copy) || null;
-
-    if (res && res.fields) {
-      renderProblems(findProblemSteps(Object.keys(res.fields)));
-      showErrors(Object.fromEntries(Object.entries(res.fields).filter(([k]) => wrapFor(k))));
-    }
-    showSubmitError(networkFail
-      ? 'We could not reach the server. Check your internet connection and try again — your answers are saved on this page.'
-      : (res && res.error) || 'Something went wrong. Please try again.');
   }
 
   /* ---------------------------------------------------------------- events */
@@ -709,6 +720,8 @@
       saveDraft();
     } else if (a === 'goto') {
       goStep(+btn.dataset.step);
+    } else if (a === 'share') {
+      sharePdf();
     } else if (a === 'download') {
       downloadPdf();
     } else if (a === 'download-separate') {
@@ -738,7 +751,7 @@
     if (state.busy) return;
     const st = e.state || {};
     if (st.ready && state.result) {
-      showReady(state.result, { auto: false, push: false });
+      showReady(state.result, { push: false });
       return;
     }
     state.step = typeof st.step === 'number' ? st.step : 0;
@@ -747,8 +760,6 @@
   });
 
   /* ---------------------------------------------------------------- start */
-  // Is automatic email set up? Decides whether the last button says "Submit application" or "Download PDF".
-  fetch('/api/pdf').then((r) => r.json()).then((j) => { state.emailEnabled = !!(j && j.emailEnabled); updateChrome(); const l = $('#stepLead'); if (l && STEPS[state.step].kind === 'review') l.textContent = leadFor(STEPS[state.step]); }).catch(() => {});
   loadDraft();
   syncRepeats();
   try { history.replaceState({ step: state.step }, ''); } catch (_) { /* ignore */ }

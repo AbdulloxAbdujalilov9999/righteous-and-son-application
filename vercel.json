@@ -1,12 +1,5 @@
 {
   "outputDirectory": "public",
-  "functions": {
-    "api/pdf.js": {
-      "maxDuration": 30,
-      "memory": 1024,
-      "includeFiles": "{fonts,assets}/**"
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
@@ -16,7 +9,6 @@
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Content-Security-Policy", "value": "default-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'" }
       ]
-    },
-    { "source": "/api/(.*)", "headers": [{ "key": "Cache-Control", "value": "no-store" }] }
+    }
   ]
 }
